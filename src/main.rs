@@ -1,11 +1,11 @@
-use flate2::{Compression, write::ZlibEncoder};
+use flate2::{Compression, read::ZlibDecoder, write::ZlibEncoder};
 use sha1::{Digest, Sha1};
 use std::{
     env,
     error::Error,
     fs,
     io::{self, Read, Write},
-    path,
+    path::{self, PathBuf},
 };
 
 const GIT_DIR: &str = ".rgit";
@@ -23,6 +23,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     match subcommand.as_str() {
         "init" => init()?,
         "hash-object" => hash_object(args)?,
+        "cat-file" => cat_file(args)?,
         _ => return Err(format!("Unknown subcommand: {}", subcommand).into()),
     }
 
@@ -88,6 +89,44 @@ fn hash_object(args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>>
         }
 
         println!("{obj_id}");
+    }
+
+    Ok(())
+}
+
+fn cat_file(args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
+    let mut args: Vec<String> = args.collect();
+    let show_object_type = get_bool_flag(&mut args, "-t");
+    let print_object_content = get_bool_flag(&mut args, "-p");
+
+    if show_object_type && print_object_content {
+        return Err("switch -t is incompatible with -p".into());
+    }
+
+    let object_id = args.last().unwrap_or_else(|| {
+        todo!("Show help");
+    });
+    let object_path = PathBuf::from(GIT_DIR)
+        .join(OBJECTS_DIR)
+        .join(&object_id[..SUBDIR_LEN])
+        .join(&object_id[SUBDIR_LEN..]);
+    let compressed_content = fs::read(object_path)?;
+
+    let mut decoder = ZlibDecoder::new(compressed_content.as_slice());
+    let mut content = String::new();
+    decoder.read_to_string(&mut content)?;
+
+    let object_type = content
+        .split_whitespace()
+        .next()
+        .ok_or_else(|| "Malformed content")?;
+    if show_object_type {
+        println!("{object_type}");
+    } else if print_object_content {
+        match object_type {
+            "blob" => println!("{content}"),
+            _ => todo!(),
+        }
     }
 
     Ok(())
