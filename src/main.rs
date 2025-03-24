@@ -1,6 +1,12 @@
 use flate2::{Compression, write::ZlibEncoder};
 use sha1::{Digest, Sha1};
-use std::{env, error::Error, fs, io::Write, path};
+use std::{
+    env,
+    error::Error,
+    fs,
+    io::{self, Read, Write},
+    path,
+};
 
 const GIT_DIR: &str = ".rgit";
 const OBJECTS_DIR: &str = "objects";
@@ -47,24 +53,26 @@ fn init() -> Result<(), Box<dyn Error>> {
 
 fn hash_object(args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
     let mut args: Vec<String> = args.collect();
-    let write_to_db = args
-        .iter()
-        .position(|arg| arg.as_str() == "-w")
-        .map(|index| {
-            args.remove(index);
-            true
-        })
-        .unwrap_or(false);
+    let write_to_db = get_bool_flag(&mut args, "-w");
+    let use_stdin = get_bool_flag(&mut args, "--stdin");
 
-    let files = args;
-    for file in files {
-        let content = fs::read_to_string(file)?;
+    let contents = if use_stdin {
+        let mut buf = String::new();
+        io::stdin().read_to_string(&mut buf)?;
+        vec![buf]
+    } else {
+        args.iter()
+            .map(|file| fs::read_to_string(file).unwrap())
+            .collect()
+    };
+
+    for content in contents {
         let header = format!("blob {}\0", content.bytes().len());
         let store = header + content.as_str();
-        let hash = format!("{:x}", Sha1::digest(&store));
+        let obj_id = format!("{:x}", Sha1::digest(&store));
 
         if write_to_db {
-            let subdir = &hash[..SUBDIR_LEN];
+            let subdir = &obj_id[..SUBDIR_LEN];
             let obj_dir = path::absolute(GIT_DIR)?.join(OBJECTS_DIR).join(subdir);
             if !obj_dir.try_exists()? {
                 fs::create_dir(&obj_dir)?;
@@ -74,13 +82,23 @@ fn hash_object(args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>>
             encoder.write_all(store.as_bytes())?;
             let compressed = encoder.finish()?;
 
-            let filename = &hash[SUBDIR_LEN..];
+            let filename = &obj_id[SUBDIR_LEN..];
             let file_path = obj_dir.join(filename);
             fs::write(file_path, compressed)?;
         }
 
-        println!("{hash}");
+        println!("{obj_id}");
     }
 
     Ok(())
+}
+
+fn get_bool_flag(args: &mut Vec<String>, flag: &str) -> bool {
+    args.iter()
+        .position(|arg| arg.as_str() == flag)
+        .map(|index| {
+            args.remove(index);
+            true
+        })
+        .unwrap_or(false)
 }
