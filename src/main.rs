@@ -1,5 +1,11 @@
+use flate2::{Compression, write::ZlibEncoder};
 use sha1::{Digest, Sha1};
-use std::{env, error::Error, fs};
+use std::{env, error::Error, fs, io::Write, path};
+
+const GIT_DIR: &str = ".rgit";
+const OBJECTS_DIR: &str = "objects";
+
+const SUBDIR_LEN: usize = 2;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();
@@ -18,7 +24,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn init() -> Result<(), Box<dyn Error>> {
-    let git_dir_path = std::path::absolute(".rgit")?;
+    let git_dir_path = path::absolute(GIT_DIR)?;
     if git_dir_path.try_exists()? {
         println!(
             "Reinitialized existing Git repository in {}",
@@ -40,14 +46,40 @@ fn init() -> Result<(), Box<dyn Error>> {
 }
 
 fn hash_object(args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
-    let files: Vec<String> = args.collect();
+    let mut args: Vec<String> = args.collect();
+    let write_to_db = args
+        .iter()
+        .position(|arg| arg.as_str() == "-w")
+        .map(|index| {
+            args.remove(index);
+            true
+        })
+        .unwrap_or(false);
 
+    let files = args;
     for file in files {
         let content = fs::read_to_string(file)?;
         let header = format!("blob {}\0", content.bytes().len());
         let store = header + content.as_str();
-        let hash = Sha1::digest(store);
-        println!("{:x}", hash);
+        let hash = format!("{:x}", Sha1::digest(&store));
+
+        if write_to_db {
+            let subdir = &hash[..SUBDIR_LEN];
+            let obj_dir = path::absolute(GIT_DIR)?.join(OBJECTS_DIR).join(subdir);
+            if !obj_dir.try_exists()? {
+                fs::create_dir(&obj_dir)?;
+            }
+
+            let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+            encoder.write_all(store.as_bytes())?;
+            let compressed = encoder.finish()?;
+
+            let filename = &hash[SUBDIR_LEN..];
+            let file_path = obj_dir.join(filename);
+            fs::write(file_path, compressed)?;
+        }
+
+        println!("{hash}");
     }
 
     Ok(())
