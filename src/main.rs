@@ -63,8 +63,8 @@ fn hash_object(args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>>
         vec![buf]
     } else {
         args.iter()
-            .map(|file| fs::read_to_string(file).unwrap())
-            .collect()
+            .map(|file| fs::read_to_string(file))
+            .collect::<Result<_, _>>()?
     };
 
     for content in contents {
