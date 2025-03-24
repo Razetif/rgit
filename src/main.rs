@@ -97,11 +97,14 @@ fn hash_object(args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>>
 fn cat_file(args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
     let mut args: Vec<String> = args.collect();
     let show_object_type = get_bool_flag(&mut args, "-t");
+    let show_object_size = get_bool_flag(&mut args, "-s");
     let print_object_content = get_bool_flag(&mut args, "-p");
 
-    if show_object_type && print_object_content {
-        return Err("switch -t is incompatible with -p".into());
-    }
+    check_mutually_exclusive_flags(vec![
+        ("-t", show_object_type),
+        ("-s", show_object_size),
+        ("-p", print_object_content),
+    ])?;
 
     let object_id = args.last().unwrap_or_else(|| {
         todo!("Show help");
@@ -122,6 +125,8 @@ fn cat_file(args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
         .ok_or_else(|| "Malformed content")?;
     if show_object_type {
         println!("{object_type}");
+    } else if show_object_size {
+        println!("{}", content.as_bytes().len());
     } else if print_object_content {
         match object_type {
             "blob" => println!("{content}"),
@@ -140,4 +145,18 @@ fn get_bool_flag(args: &mut Vec<String>, flag: &str) -> bool {
             true
         })
         .unwrap_or(false)
+}
+
+fn check_mutually_exclusive_flags(flags: Vec<(&str, bool)>) -> Result<(), String> {
+    let trues: Vec<_> = flags
+        .iter()
+        .filter(|(_, value)| *value)
+        .map(|(name, _)| *name)
+        .collect();
+
+    if trues.len() > 2 {
+        return Err(format!("switch {} is incompatible with {}", trues[0], trues[1]).into());
+    }
+
+    Ok(())
 }
