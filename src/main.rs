@@ -44,7 +44,9 @@ fn hash_object(args: impl Iterator<Item = String>) -> Result<(), Box<dyn Error>>
 
     for file in files {
         let content = fs::read_to_string(file)?;
-        let hash = Sha1::digest(content);
+        let header = format!("blob {}\0", content.bytes().len());
+        let store = header + content.as_str();
+        let hash = Sha1::digest(store);
         println!("{:x}", hash);
     }
 
