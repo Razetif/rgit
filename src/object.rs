@@ -1,6 +1,8 @@
 use std::fmt::{self, Formatter};
 use std::{error::Error, fmt::Display};
 
+use crate::error::MalformedError;
+
 pub enum Type {
     Blob,
     Tree,
@@ -13,7 +15,7 @@ impl Type {
             "blob" => Ok(Self::Blob),
             "tree" => Ok(Self::Tree),
             "commit" => Ok(Self::Commit),
-            _ => Err("Invalid object type".into()),
+            _ => Err(MalformedError.into()),
         }
     }
 }

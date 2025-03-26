@@ -1,4 +1,5 @@
 use clap::{Args, Parser, Subcommand};
+use error::MalformedError;
 use flate2::{Compression, read::ZlibDecoder, write::ZlibEncoder};
 use index::{Entry, Index};
 use object::Type;
@@ -11,6 +12,7 @@ use std::{
     path::{self, PathBuf},
 };
 
+mod error;
 mod index;
 mod object;
 
@@ -159,15 +161,13 @@ impl Commands {
 
         let (header, body) = {
             let mut parts = contents.splitn(2, |byte| *byte == b'\0');
-            let header = parts.next().ok_or_else(|| "Malformed input")?;
-            let body = parts.next().ok_or_else(|| "Malformed input")?;
+            let header = parts.next().ok_or(MalformedError)?;
+            let body = parts.next().ok_or(MalformedError)?;
             (header, body)
         };
         let object_type = {
             let header_str = String::from_utf8(header.into())?;
-            let (typ, _) = header_str
-                .split_once(' ')
-                .ok_or_else(|| "Malformed input")?;
+            let (typ, _) = header_str.split_once(' ').ok_or(MalformedError)?;
             Type::build(typ)?
         };
 
@@ -208,10 +208,7 @@ impl Commands {
             .iter()
             .map(|filename| {
                 let mut file = File::open(filename)?;
-                let entry = Entry::from(
-                    filename.to_str().ok_or_else(|| "Malformed input")?,
-                    &mut file,
-                );
+                let entry = Entry::from(filename.to_str().ok_or(MalformedError)?, &mut file);
                 entry
             })
             .collect::<Result<_, _>>()?;
