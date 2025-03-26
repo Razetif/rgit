@@ -1,19 +1,27 @@
 use clap::{Args, Parser, Subcommand};
 use flate2::{Compression, read::ZlibDecoder, write::ZlibEncoder};
 use index::{Entry, Index};
+use object::Type;
 use sha1::{Digest, Sha1};
 use std::{
     error::Error,
     fs::{self, File, OpenOptions, metadata},
-    io::{self, Read, Seek, SeekFrom, Write},
+    io::{self, Read, Seek, Write},
     os::unix::fs::MetadataExt,
     path::{self, PathBuf},
 };
 
 mod index;
+mod object;
 
 const GIT_DIR: &str = ".rgit";
+const INDEX_FILE: &str = "index";
 const OBJECTS_DIR: &str = "objects";
+const OBJECTS_INFO_DIR: &str = "info";
+const OBJECTS_PACK_DIR: &str = "pack";
+const REFS_DIR: &str = "refs";
+const REFS_HEADS_DIR: &str = "heads";
+const REFS_TAGS_DIR: &str = "refs";
 
 const SUBDIR_LEN: usize = 2;
 
@@ -82,60 +90,56 @@ impl Commands {
 
     fn init(&self) -> Result<(), Box<dyn Error>> {
         let git_dir_path = path::absolute(GIT_DIR)?;
-        if git_dir_path.try_exists()? {
-            println!(
-                "Reinitialized existing Git repository in {}",
-                git_dir_path.display()
-            );
+        let message = if git_dir_path.try_exists()? {
+            "Reinitialized existing Git repository in"
         } else {
-            println!(
-                "Initialized empty Git repository in {}",
-                git_dir_path.display()
-            );
-        }
+            "Initialized empty Git repository in"
+        };
+        println!("{} {}", message, git_dir_path.display());
 
-        fs::create_dir_all(git_dir_path.join("objects").join("info"))?;
-        fs::create_dir_all(git_dir_path.join("objects").join("pack"))?;
-        fs::create_dir_all(git_dir_path.join("refs").join("heads"))?;
-        fs::create_dir_all(git_dir_path.join("refs").join("tags"))?;
+        fs::create_dir_all(git_dir_path.join(OBJECTS_DIR).join(OBJECTS_INFO_DIR))?;
+        fs::create_dir_all(git_dir_path.join(OBJECTS_DIR).join(OBJECTS_PACK_DIR))?;
+        fs::create_dir_all(git_dir_path.join(REFS_DIR).join(REFS_HEADS_DIR))?;
+        fs::create_dir_all(git_dir_path.join(REFS_DIR).join(REFS_TAGS_DIR))?;
 
         Ok(())
     }
 
     fn hash_object(&self, args: &HashObjectArgs) -> Result<(), Box<dyn Error>> {
-        let contents = if args.use_stdin {
-            let mut buf = String::new();
-            io::stdin().read_to_string(&mut buf)?;
+        let file_contents_list = if args.use_stdin {
+            let mut buf = Vec::new();
+            io::stdin().read_to_end(&mut buf)?;
             vec![buf]
         } else {
             args.files
                 .iter()
-                .map(|file| fs::read_to_string(file))
+                .map(|file| fs::read(file))
                 .collect::<Result<_, _>>()?
         };
 
-        for content in contents {
-            let header = format!("blob {}\0", content.bytes().len());
-            let store = header + content.as_str();
-            let obj_id = format!("{:x}", Sha1::digest(&store));
+        for body in file_contents_list {
+            let header = format!("{} {}\0", Type::Blob, body.len()).into_bytes();
+            let mut contents = header;
+            contents.extend_from_slice(&body);
+            let object_id = format!("{:x}", Sha1::digest(&contents));
 
             if args.write_to_db {
-                let subdir = &obj_id[..SUBDIR_LEN];
-                let obj_dir = path::absolute(GIT_DIR)?.join(OBJECTS_DIR).join(subdir);
-                if !obj_dir.try_exists()? {
-                    fs::create_dir(&obj_dir)?;
+                let subdir = &object_id[..SUBDIR_LEN];
+                let object_dir_path = path::absolute(GIT_DIR)?.join(OBJECTS_DIR).join(subdir);
+                if !object_dir_path.try_exists()? {
+                    fs::create_dir(&object_dir_path)?;
                 }
 
                 let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-                encoder.write_all(store.as_bytes())?;
+                encoder.write_all(contents.as_slice())?;
                 let compressed = encoder.finish()?;
 
-                let filename = &obj_id[SUBDIR_LEN..];
-                let file_path = obj_dir.join(filename);
+                let filename = &object_id[SUBDIR_LEN..];
+                let file_path = object_dir_path.join(filename);
                 fs::write(file_path, compressed)?;
             }
 
-            println!("{obj_id}");
+            println!("{object_id}");
         }
 
         Ok(())
@@ -143,27 +147,40 @@ impl Commands {
 
     fn cat_file(&self, args: &CatFileArgs) -> Result<(), Box<dyn Error>> {
         let object_id = &args.object;
-        let object_path = PathBuf::from(GIT_DIR)
+        let object_file_path = PathBuf::from(GIT_DIR)
             .join(OBJECTS_DIR)
             .join(&object_id[..SUBDIR_LEN])
             .join(&object_id[SUBDIR_LEN..]);
-        let compressed_content = fs::read(object_path)?;
+        let compressed_contents = fs::read(object_file_path)?;
 
-        let mut decoder = ZlibDecoder::new(compressed_content.as_slice());
-        let mut content = String::new();
-        decoder.read_to_string(&mut content)?;
+        let mut decoder = ZlibDecoder::new(compressed_contents.as_slice());
+        let mut contents = Vec::new();
+        decoder.read_to_end(&mut contents)?;
 
-        let object_type = content
-            .split_whitespace()
-            .next()
-            .ok_or_else(|| "Malformed content")?;
+        let (header, body) = {
+            let mut parts = contents.splitn(2, |byte| *byte == b'\0');
+            let header = parts.next().ok_or_else(|| "Malformed input")?;
+            let body = parts.next().ok_or_else(|| "Malformed input")?;
+            (header, body)
+        };
+        let object_type = {
+            let header_str = String::from_utf8(header.into())?;
+            let (typ, _) = header_str
+                .split_once(' ')
+                .ok_or_else(|| "Malformed input")?;
+            Type::build(typ)?
+        };
+
         if args.show_object_type {
             println!("{object_type}");
         } else if args.show_object_size {
-            println!("{}", content.as_bytes().len());
+            println!("{}", contents.len());
         } else if args.print_object_content {
             match object_type {
-                "blob" => println!("{content}"),
+                Type::Blob => {
+                    let body = String::from_utf8_lossy(body);
+                    println!("{body}")
+                }
                 _ => todo!(),
             }
         }
@@ -172,13 +189,13 @@ impl Commands {
     }
 
     fn update_index(&self, args: &UpdateIndexArgs) -> Result<(), Box<dyn Error>> {
-        let index_path = PathBuf::from(GIT_DIR).join("index");
+        let index_file_path = PathBuf::from(GIT_DIR).join(INDEX_FILE);
         let mut index_file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
-            .open(&index_path)?;
-        let mut index = if metadata(index_path)?.size() == 0 {
+            .open(&index_file_path)?;
+        let mut index = if metadata(index_file_path)?.size() == 0 {
             Index::empty()
         } else {
             let mut buf = Vec::new();
@@ -220,7 +237,7 @@ impl Commands {
         }
 
         let content = index.serialize()?;
-        index_file.seek(SeekFrom::Start(0))?;
+        index_file.rewind()?;
         index_file.write_all(&content)?;
         index_file.set_len(content.len() as u64)?;
 

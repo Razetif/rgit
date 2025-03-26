@@ -80,7 +80,7 @@ pub struct Entry {
 }
 
 impl Entry {
-    pub fn from(filename: &str, file: &mut File) -> Result<Self, Box<dyn Error>> {
+    pub fn from(filename: impl AsRef<str>, file: &mut File) -> Result<Self, Box<dyn Error>> {
         let mut content = Vec::new();
         file.read_to_end(&mut content)?;
         let object_id: [u8; 20] = Sha1::digest(content).try_into()?;
@@ -96,7 +96,7 @@ impl Entry {
             gid: metadata.gid(),
             size: metadata.size(),
             object_id,
-            filename: String::from(filename),
+            filename: filename.as_ref().to_string(),
         })
     }
 
