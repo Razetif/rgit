@@ -2,7 +2,7 @@ use sha1::{Digest, Sha1};
 use std::{
     error::Error,
     fs::File,
-    io::{Cursor, Read},
+    io::{Cursor, Read, Seek},
     os::unix::fs::MetadataExt,
 };
 
@@ -141,11 +141,13 @@ impl Entry {
         let flag = u16::from_be_bytes(flag);
         let filename_len = usize::try_from(flag & 0xFFF)?;
 
-        let mut filename = Vec::with_capacity(filename_len);
-        cursor
-            .take(filename_len as u64)
-            .read_to_end(&mut filename)?;
+        let mut filename = vec![0; filename_len];
+        cursor.read_exact(&mut filename)?;
         let filename = String::from_utf8(filename)?;
+
+        // Skip null byte and padding
+        let padding_len = (8 - (cursor.position() % 8)) % 8;
+        cursor.seek_relative(1 + padding_len as i64)?;
 
         Ok(Entry {
             ctime,
