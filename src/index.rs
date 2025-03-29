@@ -147,7 +147,7 @@ impl Entry {
 
         // Skip null byte and padding
         let padding_len = (8 - (cursor.position() % 8)) % 8;
-        cursor.seek_relative(1 + padding_len as i64)?;
+        cursor.seek_relative(padding_len as i64)?;
 
         Ok(Entry {
             ctime,
