@@ -39,6 +39,7 @@ pub enum Commands {
     HashObject(HashObjectArgs),
     CatFile(CatFileArgs),
     UpdateIndex(UpdateIndexArgs),
+    LsFiles(LsFilesArgs),
 }
 
 #[derive(Args, Debug)]
@@ -80,6 +81,11 @@ pub struct UpdateIndexArgs {
     files: Vec<PathBuf>,
 }
 
+#[derive(Args, Debug)]
+pub struct LsFilesArgs {
+    files: Vec<PathBuf>,
+}
+
 impl Commands {
     pub fn run(&self) -> Result<()> {
         match self {
@@ -87,6 +93,7 @@ impl Commands {
             Self::HashObject(args) => self.hash_object(&args),
             Self::CatFile(args) => self.cat_file(&args),
             Self::UpdateIndex(args) => self.update_index(&args),
+            Self::LsFiles(args) => self.ls_files(&args),
         }
     }
 
@@ -237,6 +244,29 @@ impl Commands {
         index_file.rewind()?;
         index_file.write_all(&content)?;
         index_file.set_len(content.len() as u64)?;
+
+        Ok(())
+    }
+
+    fn ls_files(&self, args: &LsFilesArgs) -> Result<()> {
+        let index_file_path = PathBuf::from(GIT_DIR).join(INDEX_FILE);
+        let buf = fs::read(index_file_path)?;
+        let index = Index::parse(buf)?;
+
+        let entries = index
+            .entries
+            .iter()
+            .filter(|entry| {
+                args.files.is_empty()
+                    || args.files.iter().any(|file| {
+                        file.to_str()
+                            .map_or(false, |filename| filename == entry.filename)
+                    })
+            })
+            .collect::<Vec<_>>();
+        for entry in entries {
+            println!("{}", entry.filename);
+        }
 
         Ok(())
     }
