@@ -1,6 +1,6 @@
+use anyhow::Result;
 use sha1::{Digest, Sha1};
 use std::{
-    error::Error,
     fs::File,
     io::{Cursor, Read, Seek},
     os::unix::fs::MetadataExt,
@@ -22,7 +22,7 @@ impl Index {
         }
     }
 
-    pub fn parse(buf: Vec<u8>) -> Result<Self, Box<dyn Error>> {
+    pub fn parse(buf: Vec<u8>) -> Result<Self> {
         let mut cursor = Cursor::new(buf);
         // Skip signature (DIRC)
         cursor.set_position(4);
@@ -44,7 +44,7 @@ impl Index {
         Ok(Index { version, entries })
     }
 
-    pub fn serialize(&self) -> Result<Vec<u8>, Box<dyn Error>> {
+    pub fn serialize(&self) -> Result<Vec<u8>> {
         let mut contents: Vec<u8> = Vec::new();
 
         // Header
@@ -80,7 +80,7 @@ pub struct Entry {
 }
 
 impl Entry {
-    pub fn from(filename: impl AsRef<str>, file: &mut File) -> Result<Self, Box<dyn Error>> {
+    pub fn from(filename: impl AsRef<str>, file: &mut File) -> Result<Self> {
         let mut content = Vec::new();
         file.read_to_end(&mut content)?;
         let object_id: [u8; 20] = Sha1::digest(content).try_into()?;
@@ -100,7 +100,7 @@ impl Entry {
         })
     }
 
-    pub fn parse(cursor: &mut Cursor<Vec<u8>>) -> Result<Self, Box<dyn Error>> {
+    pub fn parse(cursor: &mut Cursor<Vec<u8>>) -> Result<Self> {
         let mut ctime = [0u8; 8];
         cursor.read_exact(&mut ctime)?;
         let ctime = i64::from_be_bytes(ctime);

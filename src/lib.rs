@@ -1,3 +1,4 @@
+use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 use error::MalformedError;
 use flate2::{Compression, read::ZlibDecoder, write::ZlibEncoder};
@@ -5,7 +6,6 @@ use index::{Entry, Index};
 use object::Type;
 use sha1::{Digest, Sha1};
 use std::{
-    error::Error,
     fs::{self, File, OpenOptions, metadata},
     io::{self, Read, Seek, Write},
     os::unix::fs::MetadataExt,
@@ -81,7 +81,7 @@ pub struct UpdateIndexArgs {
 }
 
 impl Commands {
-    pub fn run(&self) -> Result<(), Box<dyn Error>> {
+    pub fn run(&self) -> Result<()> {
         match self {
             Self::Init => self.init(),
             Self::HashObject(args) => self.hash_object(&args),
@@ -90,7 +90,7 @@ impl Commands {
         }
     }
 
-    fn init(&self) -> Result<(), Box<dyn Error>> {
+    fn init(&self) -> Result<()> {
         let git_dir_path = path::absolute(GIT_DIR)?;
         let message = if git_dir_path.try_exists()? {
             "Reinitialized existing Git repository in"
@@ -107,7 +107,7 @@ impl Commands {
         Ok(())
     }
 
-    fn hash_object(&self, args: &HashObjectArgs) -> Result<(), Box<dyn Error>> {
+    fn hash_object(&self, args: &HashObjectArgs) -> Result<()> {
         let file_contents_list = if args.use_stdin {
             let mut buf = Vec::new();
             io::stdin().read_to_end(&mut buf)?;
@@ -147,7 +147,7 @@ impl Commands {
         Ok(())
     }
 
-    fn cat_file(&self, args: &CatFileArgs) -> Result<(), Box<dyn Error>> {
+    fn cat_file(&self, args: &CatFileArgs) -> Result<()> {
         let object_id = &args.object;
         let object_file_path = PathBuf::from(GIT_DIR)
             .join(OBJECTS_DIR)
@@ -188,14 +188,14 @@ impl Commands {
         Ok(())
     }
 
-    fn update_index(&self, args: &UpdateIndexArgs) -> Result<(), Box<dyn Error>> {
+    fn update_index(&self, args: &UpdateIndexArgs) -> Result<()> {
         let index_file_path = PathBuf::from(GIT_DIR).join(INDEX_FILE);
         let mut index_file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .open(&index_file_path)?;
-        let mut index = if metadata(index_file_path)?.size() == 0 {
+        let mut index = if metadata(&index_file_path)?.size() == 0 {
             Index::empty()
         } else {
             let mut buf = Vec::new();
@@ -211,7 +211,7 @@ impl Commands {
                 let entry = Entry::from(filename.to_str().ok_or(MalformedError)?, &mut file);
                 entry
             })
-            .collect::<Result<_, _>>()?;
+            .collect::<Result<_>>()?;
         for entry in entries {
             if args.remove {
                 if index.entries.contains(&entry) {

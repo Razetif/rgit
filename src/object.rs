@@ -1,5 +1,7 @@
+use std::fmt::Display;
 use std::fmt::{self, Formatter};
-use std::{error::Error, fmt::Display};
+
+use anyhow::Result;
 
 use crate::error::MalformedError;
 
@@ -10,7 +12,7 @@ pub enum Type {
 }
 
 impl Type {
-    pub fn build(s: impl AsRef<str>) -> Result<Self, Box<dyn Error>> {
+    pub fn build(s: impl AsRef<str>) -> Result<Self> {
         match s.as_ref() {
             "blob" => Ok(Self::Blob),
             "tree" => Ok(Self::Tree),

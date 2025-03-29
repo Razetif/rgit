@@ -1,7 +1,7 @@
+use anyhow::Result;
 use clap::Parser;
 use rgit::Cli;
-use std::error::Error;
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<()> {
     Cli::parse().command.run()
 }
