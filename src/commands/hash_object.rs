@@ -1,5 +1,5 @@
 use crate::object::Type;
-use crate::{GIT_DIR, OBJECTS_DIR, SUBDIR_LEN};
+use crate::utils::{self, OBJECT_ID_SPLIT_MID, OBJECTS_DIR};
 use anyhow::Result;
 use clap::Args;
 use flate2::Compression;
@@ -7,7 +7,6 @@ use flate2::write::ZlibEncoder;
 use sha1::Digest;
 use sha1::Sha1;
 use std::io::Write;
-use std::path;
 use std::{
     fs,
     io::{self, Read},
@@ -43,8 +42,8 @@ pub fn run(args: &HashObjectArgs) -> Result<()> {
         let object_id = format!("{:x}", Sha1::digest(&contents));
 
         if args.write_to_db {
-            let subdir = &object_id[..SUBDIR_LEN];
-            let object_dir_path = path::absolute(GIT_DIR)?.join(OBJECTS_DIR).join(subdir);
+            let (subdir, filename) = object_id.split_at(OBJECT_ID_SPLIT_MID);
+            let object_dir_path = utils::resolve_path(&[OBJECTS_DIR, subdir])?;
             if !object_dir_path.try_exists()? {
                 fs::create_dir(&object_dir_path)?;
             }
@@ -53,7 +52,6 @@ pub fn run(args: &HashObjectArgs) -> Result<()> {
             encoder.write_all(contents.as_slice())?;
             let compressed = encoder.finish()?;
 
-            let filename = &object_id[SUBDIR_LEN..];
             let file_path = object_dir_path.join(filename);
             fs::write(file_path, compressed)?;
         }

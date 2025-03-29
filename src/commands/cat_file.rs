@@ -1,8 +1,13 @@
-use crate::{GIT_DIR, OBJECTS_DIR, SUBDIR_LEN, error::MalformedError, object::Type};
 use anyhow::Result;
 use clap::Args;
 use flate2::read::ZlibDecoder;
-use std::{fs, io::Read, path::PathBuf};
+use std::{fs, io::Read};
+
+use crate::{
+    error::MalformedError,
+    object::Type,
+    utils::{self, OBJECT_ID_SPLIT_MID, OBJECTS_DIR},
+};
 
 #[derive(Args, Debug)]
 pub struct CatFileArgs {
@@ -20,18 +25,16 @@ pub struct CatFileArgs {
 
 pub fn run(args: &CatFileArgs) -> Result<()> {
     let object_id = &args.object;
-    let object_file_path = PathBuf::from(GIT_DIR)
-        .join(OBJECTS_DIR)
-        .join(&object_id[..SUBDIR_LEN])
-        .join(&object_id[SUBDIR_LEN..]);
-    let compressed_contents = fs::read(object_file_path)?;
+    let (subdir, filename) = object_id.split_at(OBJECT_ID_SPLIT_MID);
+    let object_file_path = utils::resolve_path(&[OBJECTS_DIR, subdir, filename])?;
+    let compressed = fs::read(object_file_path)?;
 
-    let mut decoder = ZlibDecoder::new(compressed_contents.as_slice());
+    let mut decoder = ZlibDecoder::new(compressed.as_slice());
     let mut contents = Vec::new();
     decoder.read_to_end(&mut contents)?;
 
     let (header, body) = {
-        let mut parts = contents.splitn(2, |byte| *byte == b'\0');
+        let mut parts = contents.split_inclusive(|byte| *byte == b'\0');
         let header = parts.next().ok_or(MalformedError)?;
         let body = parts.next().ok_or(MalformedError)?;
         (header, body)
@@ -52,7 +55,7 @@ pub fn run(args: &CatFileArgs) -> Result<()> {
                 let body = String::from_utf8_lossy(body);
                 println!("{body}")
             }
-            _ => todo!(),
+            _ => todo!("Handle other object types"),
         }
     }
 

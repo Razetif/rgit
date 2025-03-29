@@ -1,5 +1,5 @@
+use crate::utils::{self, INDEX_FILE};
 use crate::{
-    GIT_DIR, INDEX_FILE,
     error::MalformedError,
     index::{Entry, Index},
 };
@@ -27,7 +27,7 @@ pub struct UpdateIndexArgs {
 }
 
 pub fn run(args: &UpdateIndexArgs) -> Result<()> {
-    let index_file_path = PathBuf::from(GIT_DIR).join(INDEX_FILE);
+    let index_file_path = utils::resolve_path(&[INDEX_FILE])?;
     let mut index_file = OpenOptions::new()
         .read(true)
         .write(true)

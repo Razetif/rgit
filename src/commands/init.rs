@@ -1,16 +1,16 @@
-use crate::{
-    GIT_DIR, OBJECTS_DIR, OBJECTS_INFO_DIR, OBJECTS_PACK_DIR, REFS_DIR, REFS_HEADS_DIR,
-    REFS_TAGS_DIR,
+use crate::utils::{
+    self, OBJECTS_DIR, OBJECTS_INFO_DIR, OBJECTS_PACK_DIR, REFS_DIR, REFS_HEADS_DIR, REFS_TAGS_DIR,
+    resolve_path,
 };
 use anyhow::Result;
 use clap::Args;
-use std::{fs, path};
+use std::fs;
 
 #[derive(Args, Debug)]
 pub struct InitArgs {}
 
 pub fn run(_args: &InitArgs) -> Result<()> {
-    let git_dir_path = path::absolute(GIT_DIR)?;
+    let git_dir_path = utils::resolve_path(&[] as &[&str])?;
     let message = if git_dir_path.try_exists()? {
         "Reinitialized existing Git repository in"
     } else {
@@ -18,10 +18,10 @@ pub fn run(_args: &InitArgs) -> Result<()> {
     };
     println!("{} {}", message, git_dir_path.display());
 
-    fs::create_dir_all(git_dir_path.join(OBJECTS_DIR).join(OBJECTS_INFO_DIR))?;
-    fs::create_dir_all(git_dir_path.join(OBJECTS_DIR).join(OBJECTS_PACK_DIR))?;
-    fs::create_dir_all(git_dir_path.join(REFS_DIR).join(REFS_HEADS_DIR))?;
-    fs::create_dir_all(git_dir_path.join(REFS_DIR).join(REFS_TAGS_DIR))?;
+    fs::create_dir_all(resolve_path(&[OBJECTS_DIR, OBJECTS_INFO_DIR])?)?;
+    fs::create_dir_all(resolve_path(&[OBJECTS_DIR, OBJECTS_PACK_DIR])?)?;
+    fs::create_dir_all(resolve_path(&[REFS_DIR, REFS_HEADS_DIR])?)?;
+    fs::create_dir_all(resolve_path(&[REFS_DIR, REFS_TAGS_DIR])?)?;
 
     Ok(())
 }

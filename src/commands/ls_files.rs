@@ -1,4 +1,5 @@
-use crate::{GIT_DIR, INDEX_FILE, index::Index};
+use crate::index::Index;
+use crate::utils::{self, INDEX_FILE};
 use anyhow::Result;
 use clap::Args;
 use std::{fs, path::PathBuf};
@@ -9,7 +10,7 @@ pub struct LsFilesArgs {
 }
 
 pub fn run(args: &LsFilesArgs) -> Result<()> {
-    let index_file_path = PathBuf::from(GIT_DIR).join(INDEX_FILE);
+    let index_file_path = utils::resolve_path(&[INDEX_FILE])?;
     let buf = fs::read(index_file_path)?;
     let index = Index::parse(buf)?;
 
