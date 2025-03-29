@@ -13,7 +13,7 @@ const OBJECTS_INFO_DIR: &str = "info";
 const OBJECTS_PACK_DIR: &str = "pack";
 const REFS_DIR: &str = "refs";
 const REFS_HEADS_DIR: &str = "heads";
-const REFS_TAGS_DIR: &str = "refs";
+const REFS_TAGS_DIR: &str = "tags";
 
 const SUBDIR_LEN: usize = 2;
 
