@@ -1,0 +1,32 @@
+use crate::{GIT_DIR, INDEX_FILE, index::Index};
+use anyhow::Result;
+use clap::Args;
+use std::{fs, path::PathBuf};
+
+#[derive(Args, Debug)]
+pub struct LsFilesArgs {
+    files: Vec<PathBuf>,
+}
+
+pub fn run(args: &LsFilesArgs) -> Result<()> {
+    let index_file_path = PathBuf::from(GIT_DIR).join(INDEX_FILE);
+    let buf = fs::read(index_file_path)?;
+    let index = Index::parse(buf)?;
+
+    let entries = index
+        .entries
+        .iter()
+        .filter(|entry| {
+            args.files.is_empty()
+                || args.files.iter().any(|file| {
+                    file.to_str()
+                        .map_or(false, |filename| filename == entry.filename)
+                })
+        })
+        .collect::<Vec<_>>();
+    for entry in entries {
+        println!("{}", entry.filename);
+    }
+
+    Ok(())
+}
