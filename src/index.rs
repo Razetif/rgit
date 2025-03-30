@@ -6,6 +6,8 @@ use std::{
     os::unix::fs::MetadataExt,
 };
 
+use crate::{error::MalformedError, object::ObjectId, utils::CHECKSUM_LEN};
+
 const DEFAULT_VERSION: u32 = 2;
 
 #[derive(Debug)]
@@ -23,6 +25,16 @@ impl Index {
     }
 
     pub fn parse(buf: Vec<u8>) -> Result<Self> {
+        if buf.len() < CHECKSUM_LEN {
+            return Err(MalformedError.into());
+        }
+
+        let (contents, actual_checksum) = buf.split_at(buf.len() - CHECKSUM_LEN);
+        let computed_checksum: ObjectId = Sha1::digest(contents).try_into()?;
+        if computed_checksum != actual_checksum {
+            return Err(MalformedError.into());
+        }
+
         let mut cursor = Cursor::new(buf);
         // Skip signature (DIRC)
         cursor.set_position(4);
@@ -75,7 +87,7 @@ pub struct Entry {
     uid: u32,
     gid: u32,
     size: u64,
-    object_id: [u8; 20],
+    object_id: ObjectId,
     pub filename: String,
 }
 
@@ -83,7 +95,7 @@ impl Entry {
     pub fn from(filename: impl AsRef<str>, file: &mut File) -> Result<Self> {
         let mut content = Vec::new();
         file.read_to_end(&mut content)?;
-        let object_id: [u8; 20] = Sha1::digest(content).try_into()?;
+        let object_id: ObjectId = Sha1::digest(content).try_into()?;
 
         let metadata = file.metadata()?;
         Ok(Entry {

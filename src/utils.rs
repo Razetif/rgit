@@ -16,6 +16,8 @@ pub const REFS_TAGS_DIR: &str = "tags";
 
 pub const OBJECT_ID_SPLIT_MID: usize = 2;
 
+pub const CHECKSUM_LEN: usize = 20;
+
 pub fn resolve_path(parts: &[impl AsRef<Path>]) -> Result<PathBuf> {
     let base = fs::canonicalize(GIT_DIR)?;
     let path = parts.iter().fold(base, |acc, part| acc.join(part));

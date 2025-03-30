@@ -4,6 +4,7 @@ use std::fmt::{self, Formatter};
 use anyhow::Result;
 
 use crate::error::MalformedError;
+use crate::utils::CHECKSUM_LEN;
 
 pub enum Type {
     Blob,
@@ -31,3 +32,5 @@ impl Display for Type {
         }
     }
 }
+
+pub type ObjectId = [u8; CHECKSUM_LEN];
