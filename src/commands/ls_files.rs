@@ -19,14 +19,14 @@ pub fn run(args: &LsFilesArgs) -> Result<()> {
         .iter()
         .filter(|entry| {
             args.files.is_empty()
-                || args.files.iter().any(|file| {
-                    file.to_str()
-                        .map_or(false, |filename| filename == entry.filename)
-                })
+                || args
+                    .files
+                    .iter()
+                    .any(|file_path| file_path == &entry.file_path)
         })
         .collect::<Vec<_>>();
     for entry in entries {
-        println!("{}", entry.filename);
+        println!("{}", entry.file_path.display());
     }
 
     Ok(())

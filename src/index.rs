@@ -1,9 +1,14 @@
 use anyhow::Result;
 use sha1::{Digest, Sha1};
 use std::{
+    ffi::OsString,
     fs::File,
     io::{Cursor, Read, Seek},
-    os::unix::fs::MetadataExt,
+    os::unix::{
+        ffi::{OsStrExt, OsStringExt},
+        fs::MetadataExt,
+    },
+    path::{Path, PathBuf},
 };
 
 use crate::{error::MalformedError, object::ObjectId, utils::CHECKSUM_LEN};
@@ -88,11 +93,11 @@ pub struct Entry {
     gid: u32,
     size: u64,
     object_id: ObjectId,
-    pub filename: String,
+    pub file_path: PathBuf,
 }
 
 impl Entry {
-    pub fn from(filename: impl AsRef<str>, file: &mut File) -> Result<Self> {
+    pub fn from(filename: impl AsRef<Path>, file: &mut File) -> Result<Self> {
         let mut content = Vec::new();
         file.read_to_end(&mut content)?;
         let object_id: ObjectId = Sha1::digest(content).try_into()?;
@@ -108,7 +113,7 @@ impl Entry {
             gid: metadata.gid(),
             size: metadata.size(),
             object_id,
-            filename: filename.as_ref().to_string(),
+            file_path: filename.as_ref().to_path_buf(),
         })
     }
 
@@ -155,7 +160,7 @@ impl Entry {
 
         let mut filename = vec![0; filename_len];
         cursor.read_exact(&mut filename)?;
-        let filename = String::from_utf8(filename)?;
+        let filename = PathBuf::from(OsString::from_vec(filename));
 
         // Skip null byte and padding
         let padding_len = (8 - (cursor.position() % 8)) % 8;
@@ -171,7 +176,7 @@ impl Entry {
             gid,
             size,
             object_id,
-            filename,
+            file_path: filename,
         })
     }
 
@@ -187,14 +192,15 @@ impl Entry {
         buf.extend(self.object_id);
 
         let mut flag: u16 = 0;
-        if self.filename.len() < 0xFFF {
-            flag |= self.filename.len() as u16;
+        let file_path_len = self.file_path.as_os_str().len();
+        if file_path_len < 0xFFF {
+            flag |= file_path_len as u16
         } else {
             flag |= 0xFFF;
         }
         buf.extend(flag.to_be_bytes());
 
-        buf.extend(self.filename.as_bytes());
+        buf.extend(self.file_path.as_os_str().as_bytes());
         buf.push(0);
         let padding_len = (8 - (buf.len() % 8)) % 8;
         let padding = vec![0; padding_len];

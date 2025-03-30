@@ -1,8 +1,5 @@
+use crate::index::{Entry, Index};
 use crate::utils::{self, INDEX_FILE};
-use crate::{
-    error::MalformedError,
-    index::{Entry, Index},
-};
 use anyhow::Result;
 use clap::Args;
 use std::{
@@ -46,7 +43,7 @@ pub fn run(args: &UpdateIndexArgs) -> Result<()> {
         .iter()
         .map(|filename| {
             let mut file = File::open(filename)?;
-            let entry = Entry::from(filename.to_str().ok_or(MalformedError)?, &mut file);
+            let entry = Entry::from(filename, &mut file);
             entry
         })
         .collect::<Result<_>>()?;
@@ -55,17 +52,17 @@ pub fn run(args: &UpdateIndexArgs) -> Result<()> {
             if index.entries.contains(&entry) {
                 index.entries.retain(|e| *e != entry);
                 if args.verbose {
-                    println!("remove '{}'", entry.filename);
+                    println!("remove '{}'", entry.file_path.display());
                 }
             }
         }
 
         if args.add {
             if !index.entries.contains(&entry) {
-                let filename = entry.filename.clone();
+                let file_path = entry.file_path.clone();
                 index.entries.push(entry);
                 if args.verbose {
-                    println!("add '{}'", filename);
+                    println!("add '{}'", file_path.display());
                 }
             }
         }
