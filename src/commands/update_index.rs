@@ -58,9 +58,12 @@ pub fn run(args: &UpdateIndexArgs) -> Result<()> {
         }
 
         if args.add {
-            if !index.entries.contains(&entry) {
+            if let Err(pos) = index
+                .entries
+                .binary_search_by(|e| e.file_path.cmp(&entry.file_path))
+            {
                 let file_path = entry.file_path.clone();
-                index.entries.push(entry);
+                index.entries.insert(pos, entry);
                 if args.verbose {
                     println!("add '{}'", file_path.display());
                 }
